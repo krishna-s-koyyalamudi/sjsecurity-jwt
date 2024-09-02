@@ -1,21 +1,32 @@
 package com.ksk.sjsecurityjwt.config;
 
+import com.ksk.sjsecurityjwt.filter.JwtAuthFilter;
 import com.ksk.sjsecurityjwt.service.UserInfoDetailsService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+
+
+    @Autowired
+    private JwtAuthFilter jwtAuthFilter;
 
     @Bean
     public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
@@ -37,34 +48,30 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable()) // Disable CSRF protection
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/products/welcome").permitAll() // Allow access to "/products/welcome" without authentication
-                        .requestMatchers("/users").permitAll() // Allow access to "/users" without authentication
+                        .requestMatchers("/users/**").permitAll() // Allow access to "/users" without authentication
                         .requestMatchers("/products/**").authenticated()  // Require authentication for all other "/products/**" endpoints
-                )
-                .formLogin(Customizer.withDefaults()); // Enable form login with default settings
+                ).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authenticationProvider(authenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-
-//    @Bean
-//    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-//        http.csrf(customizer -> customizer.disable());
-//        http.authorizeHttpRequests(request-> request
-//                .requestMatchers("/products/welcome").permitAll()
-//                .requestMatchers("/products/**").authenticated());
-//        http.formLogin(Customizer.withDefaults());
-//        return http.build();
-//    }
-
-//    @Bean
-//    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
-//        return http.csrf().disable().authorizeHttpRequests().requestMatchers("/products/welcome").permitAll()
-//                .and().authorizeHttpRequests().requestMatchers("/products/**").authenticated()
-//                .and().formLogin().and().build();
-//    }
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider authenticationProvider = new DaoAuthenticationProvider();
+        authenticationProvider.setUserDetailsService(userDetailsService(passwordEncoder()));
+        authenticationProvider.setPasswordEncoder(passwordEncoder());
+        return authenticationProvider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
     }
 }
